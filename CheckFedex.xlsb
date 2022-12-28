@@ -1,0 +1,95 @@
+Sub FedexBillChecker()
+  'set up sheets and variables
+  Set Shipping = Sheets("Shipping")
+  Set Charges = Sheets("fedexCharges")
+  Set Orders = Sheets("Orders")
+  Set Results = Sheets("Results")
+  Set Duties = Sheets("Duties")
+  Set VAT = Sheets("VAT")
+  Set VATRates = Sheets("VATRates")
+  Shipping.Select
+  TotalDutiesOverPaid = 0
+  TotalShippingOverPaid = 0
+  TotalVATOverPaid = 0
+  rr = 1
+  dr = 1
+  
+  ' Find last row of the Shipping table
+  ShippingLR = Shipping.Range("A" & Rows.Count).End(xlUp).Row
+  
+  ' Start of main loop -
+  For i = 2 To ShippingLR
+    'grab needed data from data source
+    tmptotal = Range("BN" & i)
+    tmpDest = Range("BL" & i)
+    tmpAWB = Range("Q" & i)
+    tmpWeight = Range("AP" & i)
+    
+    'find the rate for destination
+    Set Cell = Charges.Range("B:B").Find(tmpDest)
+     If Not Cell Is Nothing Then
+        Charge = Charges.Range("E" & Cell.Row)
+        'compare Shipping charge to rate table for destination
+        If Charge < tmptotal Then
+            'if shipping charge greater than expected then add a line to Charges Report
+            rr = rr + 1
+            Results.Range("A" & rr) = tmpAWB
+            Results.Range("B" & rr) = tmpDest
+            Results.Range("C" & rr) = tmptotal
+            Results.Range("D" & rr) = Charge
+            Results.Range("E" & rr) = tmpWeight
+            Results.Range("F" & rr) = tmptotal - Charge
+            'Keep running total of over charges
+            TotalShippingOverPaid = TotalShippingOverPaid + (tmptotal - Charge)
+        End If
+     End If
+     'locate the order details in Orders sheet using AWB
+     Set finrow = Orders.Ranges("K:k").Find(tmpAWB)
+     If Not finrow Is Nothing Then
+        tmpCurrency = Orders.Range("P" & finrow.Row)
+        tmpOrderTotal = Orders.Range("L" & finrow.Row)
+     End If
+     If Range("CA" & i) <> "" Then
+        dr = dr + 1
+        'calculate expected duties based on 16.9%
+        expectedDuties = (tmpOrderTotal / 100) * 16.9
+        'set the duties to EUR if order value is EUR
+        If tmpCurrency = "EUR" Then tmpDuties = GetEURPrice(tmpDuties)
+        ' if actual duties are greater than expected duties, add a line to the Duties report.
+        If tmpDuties > expectedDuties Then
+            tmpDuties = Range("CB" & i)
+            Duties.Range("A" & dr) = tmpAWB
+            Duties.Range("B" & dr) = tmpDest
+            Duties.Range("C" & dr) = tmptotal
+            Duties.Range("D" & dr) = tmpDuties
+            Duties.Range("E" & dr) = expectedDuties
+            Duties.Range("F" & dr) = tmpCurrency
+            'Running total of over paid duties
+            TotalDutiesOverPaid = TotalDutiesOverPaid + tmpDuties
+        End If
+     End If
+     If Range("CC" & i) <> "" Then
+        dr = dr + 1
+        'check to see if order currency is in EUR or Not, if not assume GBP
+        If tmpCurrency = "EUR" Then
+                tmpvat = GetEURPrice(tmpvat)
+         End If
+         
+         'calculate the expected amount of tax by pulling in the Tax rate for destination country
+        VAT1 = tmpOrderTotal / getVATRate(tmpDest)
+        expectedVAT = tmpOrderTota - VAT1
+        
+        tmpvat = Range("CD" & i)
+        'compare the expected tax against te actual tax, if its greater, add a line to the VAT Report.
+        If tmpvat > expectedVAT Then
+            VAT.Range("A" & dr) = tmpAWB
+            VAT.Range("B" & dr) = tmpDest
+            VAT.Range("C" & dr) = tmpOrderTotal
+            VAT.Range("D" & dr) = tmpvat
+            VAT.Range("E" & dr) = tmpCurrency
+            'running total of over paid VAT
+            TotalVATOverPaid = TotalVATOverPaid + tmpvat
+        End If
+     End If
+  Next
+End Sub
